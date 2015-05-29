@@ -1,4 +1,103 @@
-define(['zepto.js'], function ($) {
+;(function ($) {
+	function updateContent ($html, $container, $newContainer, cb) {
+		$container.empty().append($html.find('#' + $container.attr('id')).children());
+		var attrs = $html.find('body')[0].attributes;
+		for (var i = 0; i < attrs.length; i++) {
+			$('body').attr(attrs[i].name, attrs[i].value);
+		}	
+		$newContainer.remove();
+		cb = cb || function () {};
+		cb();
+	}
+
+	function htmlDoc (html) {
+		var $html = $('<html></html>');
+
+		function process (tag) {
+			var result = html.match('<' + tag + '(\\s+[^>]*)?>[\\w\\W]*(?:<\/' + tag + '>)');
+			if (result) {
+				var obj = {};
+				 $.each($('<div' + result[1] + '/>')[0].attributes, function(i, attr) {
+                    obj[attr.name] = attr.value;
+                });
+				var $tag= $('<' + tag + '></' + tag + '>').append(result[0]).attr(obj);
+				$html.append($tag);
+			}
+		}
+		process('head');
+		process('body');
+		return $html;
+	}
+
+	function createNewContainer (children) {
+		return $('<div class="navigate-container"></div>').append(children);
+	}
+
+	var Navlite = function (url) {
+		if (!this instanceof Navlite) {
+			return new Navlite(url);
+		}
+		this.url = url;
+	};
+
+	Navlite.prototype.fetch = function (cb) {
+	    var self = this;
+		var responses = {			
+			fetching: function (type) {
+				$newContainer = createNewContainer();
+				$container.after($newContainer);
+				options['on' + type]($container, $newContainer);
+			},
+
+			loaded: function (url, html, type) {
+				var $html = htmlDoc(html);
+				options._invoke(function () {
+					if (type !== 'Back') {
+			    		history.pushState({}, 'title', url);
+					}
+					updateContent($html, $container, $newContainer, options['on'+ type + 'Render'].bind(options, $container));
+				});
+			},
+
+			error: function (url) {
+				location.href = url;
+			}
+		};
+
+	    $.ajax({
+	    	url: self.url,
+	    	success: function (html) {
+	    		Navlite._cache(url, html);
+	    		// responses['loaded'](url, html, type);
+	    	},
+	    	error: function () {
+	    		// responses['error'](url);
+	    	},
+	    	complete: function () {
+	    		// status = 'loaded';
+	    	}
+	    });
+	};
+
+	Navlite.prototype.render = function (cb) {
+
+	};
+
+	Navlite._cache = function () {
+		var _cache = {};
+		return {
+			set: function (url, html) {
+				_cache[url] = htmlDoc(html);
+			},
+
+			get: function (url) {
+
+			}
+		};
+	};
+
+	window.Navlite = Navlite;
+
 	var options = {
 		attr: 'smooth-navigate',
 		onForward: function () {
@@ -29,24 +128,6 @@ define(['zepto.js'], function ($) {
 		cb();
 	}
 
-	function htmlDoc (html) {
-		var $html = $('<html></html>');
-
-		function process (tag) {
-			var result = html.match('<' + tag + '(\\s+[^>]*)?>[\\w\\W]*(?:<\/' + tag + '>)');
-			if (result) {
-				var obj = {};
-				 $.each($('<div' + result[1] + '/>')[0].attributes, function(i, attr) {
-                    obj[attr.name] = attr.value;
-                });
-				var $tag= $('<' + tag + '></' + tag + '>').append(result[0]).attr(obj);
-				$html.append($tag);
-			}
-		}
-		process('head');
-		process('body');
-		return $html;
-	}
 
 	function createNewContainer (children) {
 		return $('<div class="navigate-container"></div>').append(children);
@@ -166,4 +247,4 @@ define(['zepto.js'], function ($) {
 	}
 
 	return SmoothNavigate;
-});
+})($);
