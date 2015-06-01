@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>index2</title>
+	<style type="text/css">
+	</style>
+</head>
+<body>
+	<h1>index2</h1>	
+	<script type="text/javascript" src="../lib/zepto.js"></script>
+	<script type="text/javascript" src="../navlite.js"></script>
+	<script type="text/javascript">
+		$(function () {
+			$('h1').click(function () {
+				Navlite.fetch('index1.html', function ($html) {
+					Navlite.render($html);
+					Navlite.alterUrl('index1.html');
+				});
+			});
+		});
+	</script>
+</body>
+</html>

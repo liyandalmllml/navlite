@@ -1,250 +1,186 @@
-;(function ($) {
-	function updateContent ($html, $container, $newContainer, cb) {
-		$container.empty().append($html.find('#' + $container.attr('id')).children());
-		var attrs = $html.find('body')[0].attributes;
-		for (var i = 0; i < attrs.length; i++) {
-			$('body').attr(attrs[i].name, attrs[i].value);
-		}	
-		$newContainer.remove();
-		cb = cb || function () {};
-		cb();
-	}
-
-	function htmlDoc (html) {
-		var $html = $('<html></html>');
-
-		function process (tag) {
-			var result = html.match('<' + tag + '(\\s+[^>]*)?>[\\w\\W]*(?:<\/' + tag + '>)');
+;(function ($, Navlite) {
+	var Utility = {
+		htmlDoc: function (html) {
+			var $html = $('<html></html>');
+			function process (tag) {
+				var result = html.match('<' + tag + '(\\s+[^>]*)?>[\\w\\W]*(?:<\/' + tag + '>)');
+				if (result) {
+					var obj = {};
+					 $.each($('<div' + result[1] + '/>')[0].attributes, function(i, attr) {
+	                    obj[attr.name] = attr.value;
+	                });
+					var $tag= $('<' + tag + '></' + tag + '>').append(result[0]).attr(obj);
+					$html.append($tag);
+				}
+			}
+			process('head');
+			process('body');
+			return $html;
+		},
+		invokeIfExists: function (func, args, context) {
+			if (typeof func === 'function') {
+				func.apply(context, args);
+			}
+		},
+		existsNavlite: function () {
+			return Boolean(Navlite && Navlite.fetch && Navlite.render);
+		},
+		search: function (key, url) {
+			var searchStr = url || location.search;
+			var result = searchStr.match('[\\?&]' + key + '=([^&]+)');
 			if (result) {
-				var obj = {};
-				 $.each($('<div' + result[1] + '/>')[0].attributes, function(i, attr) {
-                    obj[attr.name] = attr.value;
-                });
-				var $tag= $('<' + tag + '></' + tag + '>').append(result[0]).attr(obj);
-				$html.append($tag);
+				return result[1]; 
 			}
-		}
-		process('head');
-		process('body');
-		return $html;
-	}
+		},
+		addSearchParam: function (url, key, value) {
+			var hashUrl = url.split('#')[1] || '';
+			var normalUrl = url.split('#')[0];
+			var pureUrl = normalUrl.split('?')[0];
+			var searchParams = normalUrl.split('?')[1] || '';
 
-	function createNewContainer (children) {
-		return $('<div class="navigate-container"></div>').append(children);
-	}
-
-	var Navlite = function (url) {
-		if (!this instanceof Navlite) {
-			return new Navlite(url);
+			var updated = false;
+			searchParams.replace('(?:[\^&]' + key + '=)([^&]+)', function () {
+				updated = true;
+				return value;
+			});
+			if (!updated) {
+				searchParams += (searchParams ? '?' : '') +  key + '=' + value;
+			}
+			return pureUrl + (searchParams ? '?' + searchParams : '') + (hashUrl ? '#' + hashUrl : '');
 		}
-		this.url = url;
+	}; 
+	
+	if (Utility.existsNavlite()) {
+		return;
+	}
+	
+	var _Promise = Promise || function (func) {
+		func.call();
 	};
 
-	Navlite.prototype.fetch = function (cb) {
-	    var self = this;
-		var responses = {			
-			fetching: function (type) {
-				$newContainer = createNewContainer();
-				$container.after($newContainer);
-				options['on' + type]($container, $newContainer);
-			},
-
-			loaded: function (url, html, type) {
-				var $html = htmlDoc(html);
-				options._invoke(function () {
-					if (type !== 'Back') {
-			    		history.pushState({}, 'title', url);
-					}
-					updateContent($html, $container, $newContainer, options['on'+ type + 'Render'].bind(options, $container));
-				});
-			},
-
-			error: function (url) {
-				location.href = url;
-			}
+	var Page = (function () {
+		var searchKey = 'navlitepage';
+		var currentPage, oriPage;
+		var refresh = function () {
+			var pageIndex = parseInt(Utility.search(searchKey), 10) || 1;
+			oriPage = currentPage;
+			currentPage = pageIndex;
+			return currentPage;
 		};
-
-	    $.ajax({
-	    	url: self.url,
-	    	success: function (html) {
-	    		Navlite._cache(url, html);
-	    		// responses['loaded'](url, html, type);
-	    	},
-	    	error: function () {
-	    		// responses['error'](url);
-	    	},
-	    	complete: function () {
-	    		// status = 'loaded';
-	    	}
-	    });
-	};
-
-	Navlite.prototype.render = function (cb) {
-
-	};
-
-	Navlite._cache = function () {
-		var _cache = {};
+		refresh();
 		return {
-			set: function (url, html) {
-				_cache[url] = htmlDoc(html);
+			refresh: refresh,
+			setCurrent: function (pageIndex) {
+				oriPage = currentPage;
+				currentPage = pageIndex;
+				return currentPage;
 			},
 
-			get: function (url) {
+			getCurrent: function () {
+				return currentPage;
+			},
 
-			}
+			getOri: function () {
+				return oriPage;
+			},
+
+			getSearchKey: function () {
+				return searchKey;
+ 			}
 		};
+	})();
+
+	var _defaultConfig = {
+		urlTransfer: true,
+		onBack: function () {
+			console.log('back');
+		},
+		onForward: function () {
+			console.log('forward');
+		}
 	};
+	var _config = $.extend(_defaultConfig, {});
+
+	Navlite = {};
+
+	Navlite.config = function () {
+		if (argments.length === 1) {
+			_config = $.extend(_config, argments[0]);
+		} else if (argments.length === 2) {
+			var key = argments[0];
+			var value = argments[1];
+			_config[key] = value;
+		}
+	};
+
+	Navlite.fetch = function (url, success, error) {
+    	return new _Promise(function (resolve, reject) {
+			$.ajax({
+	    		url: url,
+	    		success: function (html) {
+	    			var $html = Utility.htmlDoc(html); 
+	    			Utility.invokeIfExists(success, [$html]);
+		    		Utility.invokeIfExists(resolve, [$html]);
+	    		},
+		    	error: function (err) {
+		    		Utility.invokeIfExists(error, [err]);
+		    		Utility.invokeIfExists(reject, [$html]);
+		    	}
+	    	});
+    	});
+	};
+
+	Navlite.alterUrl = function (url, options) {
+		var pageIndex= Page.getCurrent() + 1;
+		url = Utility.addSearchParam(url, Page.getSearchKey(), Page.setCurrent(pageIndex));
+
+		if (_config.urlTransfer) {
+			history.pushState({}, 'title', url);
+		} else {
+			// hash值变换
+		}
+	};
+
+	Navlite.render = function ($html) {
+		var $oriHtml = $('html');
+		$oriHtml.find('head').empty().append($html.find('head').children());
+		$oriHtml.find('body').empty().append($html.find('body').children());
+		function setAttrs (tag) {
+			var obj = {};
+			var attributes = [];
+			if (tag === 'html') {
+				attributes = $html[0].attributes;
+			} else {
+				attributes = $html.find(tag).get(0).attributes;
+			}
+			$.each(attributes, function (index, attr) {
+				obj[attr.name] = attr.value;
+			});	
+			$oriHtml.attr(obj);
+		}
+		setAttrs('html');
+		setAttrs('head');
+		setAttrs('body');
+	};
+
+	$(window).on('popstate', function () {
+		var currentPage = Page.refresh();
+		var oriPage = Page.getOri();
+
+		if (currentPage < oriPage) {
+			Utility.invokeIfExists(_config.onBack);
+		} else if (currentPage > oriPage) {
+			Utility.invokeIfExists(_config.onForward);
+		}
+	});
 
 	window.Navlite = Navlite;
 
-	var options = {
-		attr: 'smooth-navigate',
-		onForward: function () {
-			console.log('onForward');
-		},
-
-		onBack: function () {
-			console.log('onBack');
-		},
-		
-		onForwardRender: function () {
-			console.log('onForwardRender');
-		},
-		
-		onBackRender: function () {
-			console.log('onBackRender');
-		}
-	};
-
-	function updateContent ($html, $container, $newContainer, cb) {
-		$container.empty().append($html.find('#' + $container.attr('id')).children());
-		var attrs = $html.find('body')[0].attributes;
-		for (var i = 0; i < attrs.length; i++) {
-			$('body').attr(attrs[i].name, attrs[i].value);
-		}	
-		$newContainer.remove();
-		cb = cb || function () {};
-		cb();
-	}
-
-
-	function createNewContainer (children) {
-		return $('<div class="navigate-container"></div>').append(children);
-	}
-
-	function enhanceOptions (_options) {
-		options = $.extend(options, _options, {
-			_status: 'done',
-			_funcs: [],
-			_invoke: function (func, args, context) {
-				if (this._status === 'done') {
-					func.apply(context, args);
-					return;
-				} 
-				this._funcs.push({
-					func: func,
-					arguments: args,
-					context: context
-				});
-			},
-			async: function () {
-				var self = this;
-				self._status = 'wait';
-
-				return function () {
-					self._status = 'done';
-					$.each(self._funcs, function (index, item) {
-						self._invoke(item.func, item.arguments, item.context);
-					});	
-					self._funcs = [];
-				};
-			}
+	if (typeof define === 'function' && define.amd) {
+		define(function () {
+			return Navlite;
 		});
-
-		return options;
-	}
-
-	function wrapContainer ($container, options) {
-		var $newContainer = createNewContainer();
-		var status = 'loaded';
-
-		var responses = {
-			fetching: function (type) {
-				$newContainer = createNewContainer();
-				$container.after($newContainer);
-				options['on' + type]($container, $newContainer);
-			},
-
-			loaded: function (url, html, type) {
-				var $html = htmlDoc(html);
-				options._invoke(function () {
-					if (type !== 'Back') {
-			    		history.pushState({}, 'title', url);
-					}
-					updateContent($html, $container, $newContainer, options['on'+ type + 'Render'].bind(options, $container));
-				});
-			},
-
-			error: function (url) {
-				location.href = url;
-			}
-		};
-
-		function load (url, type) {
-			if (status === 'loading') {
-				return;
-			}
-			status = 'loading';
-			responses['fetching'](type);
-		    $.ajax({
-		    	url: url,
-		    	success: function (html) {
-		    		responses['loaded'](url, html, type);
-		    	},
-		    	error: function () {
-		    		responses['error'](url);
-		    	},
-		    	complete: function () {
-		    		status = 'loaded';
-		    	}
-		    });
-		}
-
-		function bindEventHandlers () {
-			$container.on('click', 'a', function (e) {
-				var $anchor = $(e.currentTarget);
-
-				// if (typeof $anchor.attr(options.attr) !== 'string') {
-				// 	return;
-				// }
-				var url = $anchor.prop('href');
-				if (url.indexOf('history.back()') > -1) {
-					return;
-				}
-				e.preventDefault();			
-
-				load(url, 'Forward');
-			});
-
-			$(window).on('popstate', function () {
-				load(location.href, 'Back');
-			});	
-		}
-
-		bindEventHandlers();
-	}
-
-	function SmoothNavigate ($container, _options) {
-		if (!history.pushState ||
-			!history.replaceState ||
-			!$container.attr('id')) {
-			return;
-		}
-
-		enhanceOptions(_options);
-		wrapContainer($container, options);
-	}
-
-	return SmoothNavigate;
-})($);
+	} else if (typeof module === 'object' && module.exports) {
+		module.exports = Navlite;
+	} 
+})($, window.Navlite);
