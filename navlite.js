@@ -162,6 +162,10 @@
 		setAttrs('head');
 		setAttrs('body');
 	};
+	
+	Navlite.available = (function () {
+		return Boolean(history.pushState && $);
+	})();
 
 	$(window).on('popstate', function () {
 		var currentPage = Page.refresh();
@@ -182,5 +186,5 @@
 		});
 	} else if (typeof module === 'object' && module.exports) {
 		module.exports = Navlite;
-	} 
+	}
 })($, window.Navlite);

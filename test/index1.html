@@ -12,10 +12,15 @@
 	<script type="text/javascript">
 		$(function () {
 			$('h1').click(function () {
-				Navlite.fetch('index2.html', function ($html) {
-					Navlite.render($html);
-					Navlite.alterUrl('index2.html');
-				});
+				var url = 'index2.html';
+				if (Navlite.available) {
+					Navlite.fetch(url, function ($html) {
+						Navlite.render($html);
+						Navlite.alterUrl('index2.html');
+					});
+				} else {
+					location.href = url;
+				}
 			});
 		});
 	</script>
